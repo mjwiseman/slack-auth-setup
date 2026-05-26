@@ -300,6 +300,10 @@ try {
             throw "Slack returned bad_redirect_uri. Ask an app admin to add exactly this redirect URL to the Slack app: $redirectUri"
         }
 
+        if ($slackError -eq "bad_client_secret") {
+            throw "Slack returned bad_client_secret. For this no-client-secret setup, the Slack app must have PKCE enabled under OAuth & Permissions. Enabling PKCE marks the app as a public client and is a one-way Slack app setting. If PKCE cannot be enabled, this helper would need a confidential-client flow using the Slack client secret, which is not recommended for distribution to every user."
+        }
+
         throw "Slack token exchange failed: $slackError"
     }
 

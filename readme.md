@@ -43,7 +43,7 @@ The Slack app must already be configured by an app admin:
 
 - Internal Slack app.
 - Slack MCP enabled.
-- PKCE enabled.
+- PKCE enabled under **OAuth & Permissions**.
 - Token rotation disabled for v1.
 - Redirect URL added exactly as:
 
@@ -63,6 +63,8 @@ groups:history
 mpim:history
 im:history
 ```
+
+Slack's PKCE setting is what lets this script exchange the OAuth code without using the app's client secret. If PKCE is not enabled, Slack will return `bad_client_secret` during setup.
 
 ## Setup
 
@@ -139,6 +141,18 @@ http://localhost:53682/slack/oauth/callback
 ```
 
 If you used `-RedirectPort`, add the matching port instead.
+
+### Slack returns `bad_client_secret`
+
+The Slack app has not been opted into PKCE, or Slack is still treating the OAuth flow as a confidential-client flow.
+
+Ask a Slack app admin to open the app settings and enable PKCE:
+
+```text
+OAuth & Permissions -> Proof Key for Code Exchange (PKCE) -> Opt In
+```
+
+Slack treats enabling PKCE as a one-way setting. That is expected for this helper because it is designed as a desktop/public-client flow and does not distribute the Slack client secret.
 
 ### Slack returns `access_denied`
 

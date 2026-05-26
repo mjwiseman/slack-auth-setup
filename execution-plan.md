@@ -45,7 +45,7 @@ The internal Slack app must be configured before users run the helper:
 
 - The app is internal and approved for Slack MCP use.
 - Slack MCP is enabled under **Agents & AI Apps**.
-- PKCE is enabled under **OAuth & Permissions**.
+- PKCE is enabled under **OAuth & Permissions**. This is required so the desktop helper can exchange the OAuth code without the Slack client secret.
 - Token rotation is disabled for v1.
 - Redirect URL is added exactly as:
 
@@ -98,6 +98,7 @@ The helper should fail with clear messages for:
 - OAuth state mismatch.
 - Missing authorization code.
 - Slack `bad_redirect_uri`.
+- Slack `bad_client_secret`, which means PKCE is not enabled or Slack is treating the app as a confidential client.
 - Slack token response without `access_token`.
 - Existing invalid `mcp-config.json`.
 
