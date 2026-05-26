@@ -88,6 +88,8 @@ echo $env:SLACK_MCP_TOKEN
 
 Do not paste or share the token.
 
+If the token starts with `xoxe.xoxp-`, Slack has issued an expiring user token. That can still work for testing, but it may need reauthorization later unless refresh support is added.
+
 Start Copilot CLI:
 
 ```powershell
@@ -169,6 +171,16 @@ echo $env:SLACK_MCP_TOKEN
 ```
 
 If it is blank, open a new PowerShell window and try again.
+
+### Existing `mcp-config.json` parse error
+
+The script creates a backup before changing an existing Copilot MCP config. If setup fails while updating the config, the backup file will be next to:
+
+```text
+%USERPROFILE%\.copilot\mcp-config.json
+```
+
+If the parse error mentions a missing `Depth` parameter, download the latest version of this repository and rerun the script. Older versions of the helper used a PowerShell 7 parameter that is not available in Windows PowerShell 5.1.
 
 ### Copilot cannot access a private channel
 

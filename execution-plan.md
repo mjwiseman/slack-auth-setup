@@ -101,6 +101,7 @@ The helper should fail with clear messages for:
 - Slack `bad_client_secret`, which means PKCE is not enabled or Slack is treating the app as a confidential client.
 - Slack token response without `access_token`.
 - Existing invalid `mcp-config.json`.
+- Windows PowerShell 5.1 compatibility issues, especially JSON parsing without `ConvertFrom-Json -Depth`.
 
 When the existing MCP config is invalid JSON, the script creates a backup before failing so the user or support engineer can recover the previous contents.
 

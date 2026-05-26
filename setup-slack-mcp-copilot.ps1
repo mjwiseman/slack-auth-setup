@@ -138,7 +138,7 @@ function Read-JsonFileOrDefault {
     }
 
     try {
-        return $raw | ConvertFrom-Json -Depth 100
+        return $raw | ConvertFrom-Json
     }
     catch {
         throw "Could not parse existing Copilot MCP config at '$Path'. A backup has been created. Fix or remove this file, then rerun the script. Parse error: $($_.Exception.Message)"
@@ -235,7 +235,7 @@ $authorizeQuery = ConvertTo-QueryString -Parameters @{
 }
 $authorizeUrl = "https://slack.com/oauth/v2_user/authorize?$authorizeQuery"
 
-$listener = [System.Net.HttpListener]::new()
+$listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($listenerPrefix)
 
 try {
@@ -312,8 +312,11 @@ try {
     }
 
     $accessToken = [string]$tokenResponse.access_token
-    if (-not $accessToken.StartsWith("xoxp-")) {
-        Write-Warning "Slack returned a token that does not start with xoxp-. Continuing, but confirm this is a user token if MCP access fails."
+    if ($accessToken.StartsWith("xoxe.xoxp-")) {
+        Write-Warning "Slack returned an expiring user token. This should work for immediate testing, but it may expire and need reauthorization unless refresh support is added."
+    }
+    elseif (-not $accessToken.StartsWith("xoxp-")) {
+        Write-Warning "Slack returned a token that does not look like a user token. Continuing, but confirm this token can access Slack MCP if setup fails."
     }
 
     [Environment]::SetEnvironmentVariable("SLACK_MCP_TOKEN", $accessToken, "User")
