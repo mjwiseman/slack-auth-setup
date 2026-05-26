@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Authorizes the Dayshape Slack MCP app for the current Windows user and configures GitHub Copilot CLI.
+Authorizes a Slack MCP app for the current Windows user and configures GitHub Copilot CLI.
 
 .DESCRIPTION
 This script performs a Slack OAuth user-token flow using PKCE. It does not use or require the Slack
@@ -313,10 +313,10 @@ try {
 
     $accessToken = [string]$tokenResponse.access_token
     if ($accessToken.StartsWith("xoxe.xoxp-")) {
-        Write-Warning "Slack returned an expiring user token. This should work for immediate testing, but it may expire and need reauthorization unless refresh support is added."
+        Write-Host "Slack returned an expiring user token."
     }
-    elseif (-not $accessToken.StartsWith("xoxp-")) {
-        Write-Warning "Slack returned a token that does not look like a user token. Continuing, but confirm this token can access Slack MCP if setup fails."
+    elseif (-not ($accessToken.StartsWith("xoxp-") -or $accessToken.StartsWith("xoxe.xoxp-"))) {
+        Write-Warning "Slack returned a token format this helper does not recognize. Continuing, but confirm this token can access Slack MCP if setup fails."
     }
 
     [Environment]::SetEnvironmentVariable("SLACK_MCP_TOKEN", $accessToken, "User")

@@ -36,7 +36,7 @@ You need:
 - Windows 10 or 11.
 - PowerShell.
 - GitHub Copilot CLI, usually launched with `gh copilot`.
-- Access to the Dayshape Slack workspace.
+- Access to the Slack workspace.
 - The Slack app's Client ID.
 
 The Slack app must already be configured by an app admin:
