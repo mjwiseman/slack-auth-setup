@@ -9,8 +9,8 @@ The important bit: each person authorizes Slack as themselves. Copilot then sees
 The setup script does three things:
 
 1. Opens Slack in your browser and asks you to approve the internal Slack MCP app.
-2. Stores your Slack user token in your Windows user environment as `SLACK_MCP_TOKEN`.
-3. Adds the Slack MCP server to GitHub Copilot CLI at `%USERPROFILE%\.copilot\mcp-config.json`.
+2. Adds the Slack MCP server to GitHub Copilot CLI at `%USERPROFILE%\.copilot\mcp-config.json`.
+3. Writes your Slack bearer token into that local Copilot MCP config.
 
 The Copilot CLI MCP entry looks like this:
 
@@ -21,7 +21,7 @@ The Copilot CLI MCP entry looks like this:
       "type": "http",
       "url": "https://mcp.slack.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${SLACK_MCP_TOKEN}"
+        "Authorization": "Bearer xoxe.xoxp-..."
       },
       "tools": ["*"]
     }
@@ -76,17 +76,25 @@ Open PowerShell in this folder and run:
 
 Your browser will open Slack. Approve the requested permissions.
 
-When the script finishes, open a new PowerShell window so the new user environment variable is loaded.
+When the script finishes, run Copilot CLI from any terminal.
+
+If you prefer to keep the token out of `mcp-config.json`, you can use the environment-variable mode:
+
+```powershell
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -UseEnvironmentVariable
+```
+
+That writes `Authorization: Bearer ${SLACK_MCP_TOKEN}` to the config and stores the token in your Windows user environment. If you use this mode, open a new PowerShell window before starting Copilot CLI.
 
 ## Test
 
-Check the token exists:
+Check the MCP config exists:
 
 ```powershell
-echo $env:SLACK_MCP_TOKEN
+Get-Content "$HOME\.copilot\mcp-config.json"
 ```
 
-Do not paste or share the token.
+Do not paste or share the token from the config.
 
 If the token starts with `xoxe.xoxp-`, Slack has issued an expiring user token. That can still work for testing, but it may need reauthorization later unless refresh support is added.
 
@@ -164,7 +172,7 @@ You cancelled or denied the Slack approval request. Rerun the script and approve
 
 Check that `%USERPROFILE%\.copilot\mcp-config.json` contains a `slack` entry.
 
-Check that the token is available in the terminal where you started Copilot CLI:
+If you used `-UseEnvironmentVariable`, check that the token is available in the terminal where you started Copilot CLI:
 
 ```powershell
 echo $env:SLACK_MCP_TOKEN
@@ -189,7 +197,8 @@ This setup uses your own Slack permissions. Copilot can only access private chan
 ## Security Notes
 
 - The script uses PKCE and does not need the Slack client secret.
-- The Slack token is stored in your Windows user environment as `SLACK_MCP_TOKEN`.
+- By default, the Slack token is stored in your local Copilot MCP config file.
+- If you run with `-UseEnvironmentVariable`, the Slack token is stored in your Windows user environment as `SLACK_MCP_TOKEN` instead.
 - The token is not printed by the script.
 - Do not share the token or paste it into chat, issues, logs, or screenshots.
 

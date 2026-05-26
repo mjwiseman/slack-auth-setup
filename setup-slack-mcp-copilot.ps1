@@ -4,8 +4,8 @@ Authorizes a Slack MCP app for the current Windows user and configures GitHub Co
 
 .DESCRIPTION
 This script performs a Slack OAuth user-token flow using PKCE. It does not use or require the Slack
-client secret. The returned user token is stored in the current user's SLACK_MCP_TOKEN environment
-variable, and GitHub Copilot CLI is configured to use Slack's hosted MCP endpoint.
+client secret. By default, the returned user token is written directly to the local GitHub Copilot
+CLI MCP config. Use -UseEnvironmentVariable to store it in SLACK_MCP_TOKEN instead.
 
 .EXAMPLE
 .\setup-slack-mcp-copilot.ps1 -ClientId "1234567890.1234567890123"
@@ -32,7 +32,10 @@ param(
     ),
 
     [Parameter(Mandatory = $false)]
-    [string]$ServerName = "slack"
+    [string]$ServerName = "slack",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$UseEnvironmentVariable
 )
 
 Set-StrictMode -Version Latest
@@ -162,7 +165,10 @@ function Set-JsonProperty {
 }
 
 function Update-CopilotMcpConfig {
-    param([Parameter(Mandatory = $true)][string]$ConfiguredServerName)
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfiguredServerName,
+        [Parameter(Mandatory = $true)][string]$AuthorizationHeader
+    )
 
     $copilotHome = if ([string]::IsNullOrWhiteSpace($env:COPILOT_HOME)) {
         Join-Path $HOME ".copilot"
@@ -187,7 +193,7 @@ function Update-CopilotMcpConfig {
         type = "http"
         url = "https://mcp.slack.com/mcp"
         headers = [pscustomobject]@{
-            Authorization = 'Bearer ${SLACK_MCP_TOKEN}'
+            Authorization = $AuthorizationHeader
         }
         tools = @("*")
     }
@@ -319,10 +325,16 @@ try {
         Write-Warning "Slack returned a token format this helper does not recognize. Continuing, but confirm this token can access Slack MCP if setup fails."
     }
 
-    [Environment]::SetEnvironmentVariable("SLACK_MCP_TOKEN", $accessToken, "User")
-    $env:SLACK_MCP_TOKEN = $accessToken
+    if ($UseEnvironmentVariable) {
+        [Environment]::SetEnvironmentVariable("SLACK_MCP_TOKEN", $accessToken, "User")
+        $env:SLACK_MCP_TOKEN = $accessToken
+        $authorizationHeader = 'Bearer ${SLACK_MCP_TOKEN}'
+    }
+    else {
+        $authorizationHeader = "Bearer $accessToken"
+    }
 
-    $configResult = Update-CopilotMcpConfig -ConfiguredServerName $ServerName
+    $configResult = Update-CopilotMcpConfig -ConfiguredServerName $ServerName -AuthorizationHeader $authorizationHeader
 
     Write-Host ""
     Write-Host "Slack MCP setup complete."
@@ -331,7 +343,12 @@ try {
         Write-Host "Backup of previous config: $($configResult.BackupPath)"
     }
     Write-Host ""
-    Write-Host "Open a new terminal before running GitHub Copilot CLI so it can read the new SLACK_MCP_TOKEN environment variable."
+    if ($UseEnvironmentVariable) {
+        Write-Host "Open a new terminal before running GitHub Copilot CLI so it can read the new SLACK_MCP_TOKEN environment variable."
+    }
+    else {
+        Write-Host "The Slack bearer token was written directly to the Copilot MCP config."
+    }
     Write-Host "Then run gh copilot and use /mcp show $ServerName to verify the Slack MCP server."
 }
 finally {
