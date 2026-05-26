@@ -3,18 +3,21 @@
 Authorizes a Slack MCP app for the current Windows user and configures GitHub Copilot CLI.
 
 .DESCRIPTION
-This script performs a Slack OAuth user-token flow using PKCE. It does not use or require the Slack
-client secret. By default, the returned user token is written directly to the local GitHub Copilot
-CLI MCP config. Use -UseEnvironmentVariable to store it in SLACK_MCP_TOKEN instead.
+This script performs a Slack OAuth user-token flow using a confidential-client exchange. It requires
+the Slack client secret. By default, the returned user token is written directly to the local GitHub
+Copilot CLI MCP config. Use -UseEnvironmentVariable to store it in SLACK_MCP_TOKEN instead.
 
 .EXAMPLE
-.\setup-slack-mcp-copilot.ps1 -ClientId "1234567890.1234567890123"
+.\setup-slack-mcp-copilot.ps1 -ClientId "1234567890.1234567890123" -ClientSecret "abc123"
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
     [string]$ClientId = "<REPLACE_WITH_SLACK_CLIENT_ID>",
+
+    [Parameter(Mandatory = $false)]
+    [string]$ClientSecret = "<REPLACE_WITH_SLACK_CLIENT_SECRET>",
 
     [Parameter(Mandatory = $false)]
     [int]$RedirectPort = 53682,
@@ -229,30 +232,23 @@ if ([string]::IsNullOrWhiteSpace($ClientId) -or $ClientId -eq "<REPLACE_WITH_SLA
     throw "Slack Client ID is required. Run: .\setup-slack-mcp-copilot.ps1 -ClientId `"YOUR_SLACK_CLIENT_ID`""
 }
 
+if ([string]::IsNullOrWhiteSpace($ClientSecret) -or $ClientSecret -eq "<REPLACE_WITH_SLACK_CLIENT_SECRET>") {
+    throw "Slack Client Secret is required for this confidential-client flow. Run: .\setup-slack-mcp-copilot.ps1 -ClientId `"YOUR_SLACK_CLIENT_ID`" -ClientSecret `"YOUR_SLACK_CLIENT_SECRET`""
+}
+
 if ($Scopes.Count -eq 0) {
     throw "At least one Slack user scope is required."
 }
 
 $redirectUri = "http://localhost:$RedirectPort/slack/oauth/callback"
 $listenerPrefix = "http://localhost:$RedirectPort/"
-$codeVerifier = New-Base64UrlRandomString -ByteCount 64
 $state = New-Base64UrlRandomString -ByteCount 32
-$sha256 = [System.Security.Cryptography.SHA256]::Create()
-try {
-    $challengeBytes = $sha256.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($codeVerifier))
-}
-finally {
-    $sha256.Dispose()
-}
-$codeChallenge = ConvertTo-Base64Url -Bytes $challengeBytes
 
 $authorizeQuery = ConvertTo-QueryString -Parameters @{
     client_id = $ClientId
     scope = ($Scopes -join ",")
     redirect_uri = $redirectUri
     state = $state
-    code_challenge = $codeChallenge
-    code_challenge_method = "S256"
 }
 $authorizeUrl = "https://slack.com/oauth/v2_user/authorize?$authorizeQuery"
 
@@ -302,9 +298,9 @@ try {
 
     $tokenBody = @{
         client_id = $ClientId
+        client_secret = $ClientSecret
         code = $code
         redirect_uri = $redirectUri
-        code_verifier = $codeVerifier
         grant_type = "authorization_code"
     }
 
@@ -322,7 +318,15 @@ try {
         }
 
         if ($slackError -eq "bad_client_secret") {
-            throw "Slack returned bad_client_secret. For this no-client-secret setup, the Slack app must have PKCE enabled under OAuth & Permissions. Enabling PKCE marks the app as a public client and is a one-way Slack app setting. If PKCE cannot be enabled, this helper would need a confidential-client flow using the Slack client secret, which is not recommended for distribution to every user."
+            throw "Slack returned bad_client_secret. Confirm the Slack client secret is correct and belongs to the same app as the client ID."
+        }
+
+        if ($slackError -eq "invalid_code") {
+            throw "Slack returned invalid_code. The authorization code may have expired or may have been generated for a different redirect URL. Rerun setup and complete the browser approval promptly."
+        }
+
+        if ($slackError -eq "invalid_arguments") {
+            throw "Slack returned invalid_arguments. If this Slack app has PKCE enabled, Slack may reject a confidential-client exchange for a localhost redirect. Use an app that has not opted into PKCE for this alternative flow."
         }
 
         throw "Slack token exchange failed: $slackError"
@@ -334,7 +338,7 @@ try {
 
     $accessToken = [string]$tokenResponse.access_token
     if ($accessToken.StartsWith("xoxe.xoxp-")) {
-        Write-Host "Slack returned an expiring user token."
+        Write-Warning "Slack returned an expiring user token. This alternative flow was expected to produce a long-lived user token when token rotation is disabled. Check whether the Slack app has PKCE or token rotation enabled."
     }
     elseif (-not ($accessToken.StartsWith("xoxp-") -or $accessToken.StartsWith("xoxe.xoxp-"))) {
         Write-Warning "Slack returned a token format this helper does not recognize. Continuing, but confirm this token can access Slack MCP if setup fails."

@@ -2,9 +2,9 @@
 
 ## Summary
 
-This plan replaces the shared Slack MCP bearer token with a per-user authorization flow for GitHub Copilot CLI. Each user runs a Windows PowerShell helper, approves the internal Slack MCP app in their browser, and receives a Slack user token that reflects only their own Slack permissions.
+This branch tests an alternative per-user authorization flow for GitHub Copilot CLI using Slack's confidential-client OAuth exchange. Each user runs a Windows PowerShell helper, approves the internal Slack MCP app in their browser, and receives a Slack user token that reflects only their own Slack permissions.
 
-The implementation uses Slack OAuth with PKCE, so the Slack client secret is not distributed. The token is written to the user's local Copilot MCP config by default, and Copilot CLI sends it to Slack's hosted MCP endpoint as an `Authorization` bearer token.
+The implementation requires the Slack client secret. The token is written to the user's local Copilot MCP config by default, and Copilot CLI sends it to Slack's hosted MCP endpoint as an `Authorization` bearer token.
 
 ## Current State
 
@@ -45,7 +45,7 @@ The internal Slack app must be configured before users run the helper:
 
 - The app is internal and approved for Slack MCP use.
 - Slack MCP is enabled under **Agents & AI Apps**.
-- PKCE is enabled under **OAuth & Permissions**. This is required so the desktop helper can exchange the OAuth code without the Slack client secret.
+- PKCE is not enabled. This branch is intended to test whether a non-PKCE localhost confidential-client flow returns long-lived user tokens when token rotation is disabled.
 - Token rotation is disabled for v1.
 - Redirect URL is added exactly as:
 
@@ -74,10 +74,9 @@ The main deliverable is `setup-slack-mcp-copilot.ps1`.
 
 The script:
 
-- Accepts the Slack `ClientId` as a parameter.
-- Does not accept or use a Slack client secret.
+- Accepts the Slack `ClientId` and `ClientSecret` as parameters.
 - Uses `http://localhost:53682/slack/oauth/callback` by default.
-- Generates a PKCE `code_verifier`, SHA-256 `code_challenge`, and random OAuth `state`.
+- Generates a random OAuth `state`.
 - Opens the Slack OAuth URL at `https://slack.com/oauth/v2_user/authorize`.
 - Starts a temporary local callback listener.
 - Validates the returned `state`.
@@ -100,7 +99,8 @@ The helper should fail with clear messages for:
 - OAuth state mismatch.
 - Missing authorization code.
 - Slack `bad_redirect_uri`.
-- Slack `bad_client_secret`, which means PKCE is not enabled or Slack is treating the app as a confidential client.
+- Slack `bad_client_secret`, which means the client secret is wrong or does not match the client ID.
+- Slack `invalid_arguments`, which may mean the Slack app has PKCE enabled and is rejecting this confidential-client localhost flow.
 - Slack token response without `access_token`.
 - Existing invalid `mcp-config.json`.
 - Windows PowerShell 5.1 compatibility issues, especially JSON parsing without `ConvertFrom-Json -Depth`.
@@ -114,7 +114,7 @@ Manual happy path on Windows:
 1. Run:
 
 ```powershell
-.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID"
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ClientSecret "YOUR_SLACK_CLIENT_SECRET"
 ```
 
 2. Approve Slack permissions in the browser.

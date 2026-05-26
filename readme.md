@@ -2,6 +2,8 @@
 
 This folder contains a Windows setup helper for connecting GitHub Copilot CLI to Slack using the official Slack MCP server.
 
+This branch uses a confidential-client OAuth flow. It requires the Slack app client secret and is intended for testing the long-lived-token alternative. Treat the script, shell history, and generated config as sensitive.
+
 The important bit: each person authorizes Slack as themselves. Copilot then sees the Slack messages, channels, and threads that the current Slack user can access, rather than using a shared team token.
 
 ## What This Sets Up
@@ -38,12 +40,13 @@ You need:
 - GitHub Copilot CLI, usually launched with `gh copilot`.
 - Access to the Slack workspace.
 - The Slack app's Client ID.
+- The Slack app's Client Secret.
 
 The Slack app must already be configured by an app admin:
 
 - Internal Slack app.
 - Slack MCP enabled.
-- PKCE enabled under **OAuth & Permissions**.
+- PKCE not enabled. If PKCE has already been enabled for the app, Slack says that is a one-way setting unless Slack support changes it.
 - Token rotation disabled for v1.
 - Redirect URL added exactly as:
 
@@ -64,14 +67,14 @@ mpim:history
 im:history
 ```
 
-Slack's PKCE setting is what lets this script exchange the OAuth code without using the app's client secret. If PKCE is not enabled, Slack will return `bad_client_secret` during setup.
+This branch intentionally does not use PKCE. It exchanges the OAuth code with the Slack client secret so Slack treats the localhost redirect as a confidential-client flow.
 
 ## Setup
 
 Open PowerShell in this folder and run:
 
 ```powershell
-.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID"
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ClientSecret "YOUR_SLACK_CLIENT_SECRET"
 ```
 
 Your browser will open Slack. Approve the requested permissions.
@@ -81,7 +84,7 @@ When the script finishes, run Copilot CLI from any terminal.
 If you prefer to keep the token out of `mcp-config.json`, you can use the environment-variable mode:
 
 ```powershell
-.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -UseEnvironmentVariable
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ClientSecret "YOUR_SLACK_CLIENT_SECRET" -UseEnvironmentVariable
 ```
 
 That writes `Authorization: Bearer ${SLACK_MCP_TOKEN}` to the config and stores the token in your Windows user environment. If you use this mode, open a new PowerShell window before starting Copilot CLI.
@@ -127,7 +130,7 @@ The setup script also verifies the returned token with Slack `auth.test` and pri
 Run the script with a process-local execution policy:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID"
+powershell -ExecutionPolicy Bypass -File .\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ClientSecret "YOUR_SLACK_CLIENT_SECRET"
 ```
 
 ### Port 53682 is already in use
@@ -141,7 +144,7 @@ http://localhost:53683/slack/oauth/callback
 Then rerun:
 
 ```powershell
-.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -RedirectPort 53683
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ClientSecret "YOUR_SLACK_CLIENT_SECRET" -RedirectPort 53683
 ```
 
 ### Slack returns `bad_redirect_uri`
@@ -156,15 +159,11 @@ If you used `-RedirectPort`, add the matching port instead.
 
 ### Slack returns `bad_client_secret`
 
-The Slack app has not been opted into PKCE, or Slack is still treating the OAuth flow as a confidential-client flow.
+The client secret is missing, wrong, or belongs to a different Slack app than the client ID.
 
-Ask a Slack app admin to open the app settings and enable PKCE:
+### Slack returns `invalid_arguments`
 
-```text
-OAuth & Permissions -> Proof Key for Code Exchange (PKCE) -> Opt In
-```
-
-Slack treats enabling PKCE as a one-way setting. That is expected for this helper because it is designed as a desktop/public-client flow and does not distribute the Slack client secret.
+If the Slack app has PKCE enabled, Slack may reject a confidential-client exchange for a localhost redirect. Use an app that has not opted into PKCE for this alternative flow.
 
 ### Slack returns `access_denied`
 
@@ -215,7 +214,7 @@ If that line shows the correct Slack user but Copilot still behaves like an old 
 If it still looks stale, run the setup with a temporary server name to avoid any cached MCP auth/session state:
 
 ```powershell
-.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ServerName "slack-test"
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ClientSecret "YOUR_SLACK_CLIENT_SECRET" -ServerName "slack-test"
 ```
 
 Then start a new Copilot CLI session and check:
@@ -226,11 +225,11 @@ Then start a new Copilot CLI session and check:
 
 ## Security Notes
 
-- The script uses PKCE and does not need the Slack client secret.
+- This branch requires the Slack client secret.
 - By default, the Slack token is stored in your local Copilot MCP config file.
 - If you run with `-UseEnvironmentVariable`, the Slack token is stored in your Windows user environment as `SLACK_MCP_TOKEN` instead.
 - The token is not printed by the script.
-- Do not share the token or paste it into chat, issues, logs, or screenshots.
+- Do not share the client secret or token, or paste them into chat, issues, logs, or screenshots.
 
 ## References
 
