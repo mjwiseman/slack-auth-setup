@@ -210,6 +210,21 @@ function Update-CopilotMcpConfig {
     }
 }
 
+function Test-SlackToken {
+    param([Parameter(Mandatory = $true)][string]$AccessToken)
+
+    try {
+        return Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://slack.com/api/auth.test" `
+            -Headers @{ Authorization = "Bearer $AccessToken" }
+    }
+    catch {
+        Write-Warning "Could not verify the Slack token with auth.test. Continuing setup. Error: $($_.Exception.Message)"
+        return $null
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($ClientId) -or $ClientId -eq "<REPLACE_WITH_SLACK_CLIENT_ID>") {
     throw "Slack Client ID is required. Run: .\setup-slack-mcp-copilot.ps1 -ClientId `"YOUR_SLACK_CLIENT_ID`""
 }
@@ -323,6 +338,17 @@ try {
     }
     elseif (-not ($accessToken.StartsWith("xoxp-") -or $accessToken.StartsWith("xoxe.xoxp-"))) {
         Write-Warning "Slack returned a token format this helper does not recognize. Continuing, but confirm this token can access Slack MCP if setup fails."
+    }
+
+    $authTest = Test-SlackToken -AccessToken $accessToken
+    if ($null -ne $authTest) {
+        if ($true -eq $authTest.ok) {
+            Write-Host "Slack token verified for user '$($authTest.user)' ($($authTest.user_id)) in workspace '$($authTest.team)' ($($authTest.team_id))."
+        }
+        else {
+            $authError = if ($authTest.PSObject.Properties["error"]) { $authTest.error } else { "unknown_error" }
+            Write-Warning "Slack auth.test did not accept the returned token: $authError"
+        }
     }
 
     if ($UseEnvironmentVariable) {

@@ -82,6 +82,7 @@ The script:
 - Starts a temporary local callback listener.
 - Validates the returned `state`.
 - Exchanges the authorization code through `https://slack.com/api/oauth.v2.user.access`.
+- Verifies the returned token with Slack `auth.test` and prints the Slack user/workspace IDs without printing the token.
 - Writes the returned token directly into the local Copilot MCP config by default.
 - Supports `-UseEnvironmentVariable` to store the token in the current user's `SLACK_MCP_TOKEN` environment variable and reference it from the config.
 - Updates `%USERPROFILE%\.copilot\mcp-config.json`, or `$env:COPILOT_HOME\mcp-config.json` when `COPILOT_HOME` is set.
@@ -178,3 +179,4 @@ Recommended rollout:
 - Add optional scopes for Slack message sending, files, canvases, reactions, or user profile lookup.
 - Add a `-Verify` mode that checks Copilot CLI config without running OAuth.
 - Add a `-Remove` mode that deletes the Slack MCP config entry and clears `SLACK_MCP_TOKEN`.
+- Add a `-VerifyOnly` mode that reads the configured token and runs Slack `auth.test`.

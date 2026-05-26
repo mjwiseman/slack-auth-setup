@@ -118,6 +118,8 @@ Use Slack MCP to search for recent messages mentioning actuals sync and summaris
 
 Copilot may ask for permission before using Slack MCP tools. Approve the Slack MCP tool call when prompted.
 
+The setup script also verifies the returned token with Slack `auth.test` and prints the Slack user and workspace IDs. Use that line as the source of truth for which Slack user the token belongs to.
+
 ## Troubleshooting
 
 ### PowerShell says scripts are disabled
@@ -193,6 +195,34 @@ If the parse error mentions a missing `Depth` parameter, download the latest ver
 ### Copilot cannot access a private channel
 
 This setup uses your own Slack permissions. Copilot can only access private channels and DMs that your Slack account can access.
+
+### Copilot appears to use the wrong Slack user
+
+First check the user printed by the setup script:
+
+```text
+Slack token verified for user '...' (...) in workspace '...' (...).
+```
+
+If that line shows the wrong Slack user, the browser authorized the app as the wrong logged-in Slack account. Sign out of Slack in the browser, use a private browser window, or switch Slack accounts before rerunning the setup script.
+
+If that line shows the correct Slack user but Copilot still behaves like an old user, restart Copilot CLI or run:
+
+```text
+/mcp reload slack
+```
+
+If it still looks stale, run the setup with a temporary server name to avoid any cached MCP auth/session state:
+
+```powershell
+.\setup-slack-mcp-copilot.ps1 -ClientId "YOUR_SLACK_CLIENT_ID" -ServerName "slack-test"
+```
+
+Then start a new Copilot CLI session and check:
+
+```text
+/mcp show slack-test
+```
 
 ## Security Notes
 
