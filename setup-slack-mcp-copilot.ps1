@@ -13,11 +13,11 @@ reference it from their configuration.
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $false)]
-    [string]$ClientId = "<REPLACE_WITH_SLACK_CLIENT_ID>",
+    [Parameter(Mandatory = $true)]
+    [string]$ClientId,
 
-    [Parameter(Mandatory = $false)]
-    [string]$ClientSecret = "<REPLACE_WITH_SLACK_CLIENT_SECRET>",
+    [Parameter(Mandatory = $true)]
+    [string]$ClientSecret,
 
     [Parameter(Mandatory = $false)]
     [int]$RedirectPort = 53682,
@@ -269,11 +269,11 @@ function Confirm-SetupStep {
     return [string]::IsNullOrWhiteSpace($answer) -or $answer.Trim().ToLowerInvariant().StartsWith("y")
 }
 
-if ([string]::IsNullOrWhiteSpace($ClientId) -or $ClientId -eq "<REPLACE_WITH_SLACK_CLIENT_ID>") {
+if ([string]::IsNullOrWhiteSpace($ClientId)) {
     throw "Slack Client ID is required. Run: .\setup-slack-mcp-copilot.ps1 -ClientId `"YOUR_SLACK_CLIENT_ID`""
 }
 
-if ([string]::IsNullOrWhiteSpace($ClientSecret) -or $ClientSecret -eq "<REPLACE_WITH_SLACK_CLIENT_SECRET>") {
+if ([string]::IsNullOrWhiteSpace($ClientSecret)) {
     throw "Slack Client Secret is required for this confidential-client flow. Run: .\setup-slack-mcp-copilot.ps1 -ClientId `"YOUR_SLACK_CLIENT_ID`" -ClientSecret `"YOUR_SLACK_CLIENT_SECRET`""
 }
 

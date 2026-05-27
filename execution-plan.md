@@ -111,7 +111,7 @@ The script:
 
 The helper should fail with clear messages for:
 
-- Missing or placeholder Slack client ID.
+- Missing Slack client ID or client secret.
 - Port unavailable or local listener startup failure.
 - User cancellation or denial from Slack.
 - OAuth state mismatch.
