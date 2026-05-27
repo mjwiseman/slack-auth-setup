@@ -348,7 +348,7 @@ def update_copilot_mcp_config(server_name: str = "slack") -> tuple[Path, Path | 
         "type": "http",
         "url": "https://mcp.slack.com/mcp",
         "headers": {
-            "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}",
+            "Authorization": "Bearer ${SLACK_MCP_TOKEN}",
         },
         "tools": ["*"],
     }

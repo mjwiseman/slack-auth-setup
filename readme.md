@@ -1,10 +1,23 @@
 # Slack MCP Auth Setup
 
-This folder contains setup helpers for connecting MCP clients to Slack using the official Slack MCP server.
+This repository contains setup helpers for connecting MCP clients to Slack using the official Slack MCP server.
 
-This branch uses a confidential-client OAuth flow. It requires the Slack app client secret and is intended for testing the long-lived-token alternative. Treat the script, shell history, and generated environment files as sensitive.
+This version uses a confidential-client OAuth flow. It requires the Slack app client secret and is intended for testing the long-lived-token alternative. Treat the script, shell history, and generated environment files as sensitive.
 
 The important bit: each person authorizes Slack as themselves. MCP clients then see the Slack messages, channels, and threads that the current Slack user can access, rather than using a shared team token.
+
+## Why This Exists
+
+The original setup pattern used one shared Slack user token in MCP client configuration. That works for basic testing, but it means every user is effectively searching Slack as the person who created that token. They may see private channels that person can access, and they may miss private channels that only they personally can access.
+
+The goal of these helpers is to make the better pattern easy enough for day-to-day company use:
+
+1. A Slack app admin creates and approves one internal Slack MCP app.
+2. Each person authorizes that same app with their own Slack account.
+3. The helper stores that person's user token locally as `SLACK_MCP_TOKEN`.
+4. VS Code or GitHub Copilot CLI can then use Slack MCP with that person's Slack permissions.
+
+Earlier PKCE testing returned expiring Slack tokens. This confidential-client flow uses the Slack client secret and, with token rotation disabled, has so far returned non-expiring user tokens. That makes local MCP client setup simpler, but it also means the client secret must be handled carefully.
 
 ## What This Sets Up
 
@@ -40,7 +53,7 @@ The Copilot CLI MCP entry looks like this:
       "type": "http",
       "url": "https://mcp.slack.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
+        "Authorization": "Bearer ${SLACK_MCP_TOKEN}"
       },
       "tools": ["*"]
     }
@@ -83,7 +96,7 @@ mpim:history
 im:history
 ```
 
-This branch intentionally does not use PKCE. It exchanges the OAuth code with the Slack client secret so Slack treats the localhost redirect as a confidential-client flow.
+This setup intentionally does not use PKCE. It exchanges the OAuth code with the Slack client secret so Slack treats the localhost redirect as a confidential-client flow.
 
 ## Windows Setup
 
@@ -318,9 +331,9 @@ Then start a new Copilot CLI session and check:
 
 ## Security Notes
 
-- This branch requires the Slack client secret.
+- This setup requires the Slack client secret.
 - The Slack token is stored as `SLACK_MCP_TOKEN`.
-- VS Code and Copilot CLI configs reference `SLACK_MCP_TOKEN` rather than storing the bearer token directly.
+- VS Code and Copilot CLI configs reference `SLACK_MCP_TOKEN` rather than storing the bearer token directly. VS Code uses `${env:SLACK_MCP_TOKEN}`; Copilot CLI uses `${SLACK_MCP_TOKEN}`.
 - The token is not printed by the script.
 - On macOS, the token is stored in `~/.zshenv` and a LaunchAgent plist so shell and GUI apps can read it.
 - On Windows, the token is stored as a user environment variable.

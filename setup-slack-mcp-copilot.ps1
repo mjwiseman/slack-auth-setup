@@ -190,7 +190,7 @@ function Update-CopilotMcpConfig {
         type = "http"
         url = "https://mcp.slack.com/mcp"
         headers = [pscustomobject]@{
-            Authorization = 'Bearer ${env:SLACK_MCP_TOKEN}'
+            Authorization = 'Bearer ${SLACK_MCP_TOKEN}'
         }
         tools = @("*")
     }

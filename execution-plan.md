@@ -2,7 +2,7 @@
 
 ## Summary
 
-This branch tests an alternative per-user authorization flow for GitHub Copilot CLI using Slack's confidential-client OAuth exchange. Each user runs a Windows PowerShell helper, approves the internal Slack MCP app in their browser, and receives a Slack user token that reflects only their own Slack permissions.
+This plan tests an alternative per-user authorization flow for GitHub Copilot CLI using Slack's confidential-client OAuth exchange. Each user runs a Windows PowerShell helper, approves the internal Slack MCP app in their browser, and receives a Slack user token that reflects only their own Slack permissions.
 
 The implementation requires the Slack client secret. The token is stored as `SLACK_MCP_TOKEN`, and the helper can optionally configure VS Code and GitHub Copilot CLI to reference that environment variable.
 
@@ -31,7 +31,7 @@ Copilot CLI supports remote HTTP MCP servers and HTTP headers. The target config
       "type": "http",
       "url": "https://mcp.slack.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
+        "Authorization": "Bearer ${SLACK_MCP_TOKEN}"
       },
       "tools": ["*"]
     }
@@ -61,7 +61,7 @@ The internal Slack app must be configured before users run the helper:
 
 - The app is internal and approved for Slack MCP use.
 - Slack MCP is enabled under **Agents & AI Apps**.
-- PKCE is not enabled. This branch is intended to test whether a non-PKCE localhost confidential-client flow returns long-lived user tokens when token rotation is disabled.
+- PKCE is not enabled. This plan is intended to test whether a non-PKCE localhost confidential-client flow returns long-lived user tokens when token rotation is disabled.
 - Token rotation is disabled for v1.
 - Redirect URL is added exactly as:
 

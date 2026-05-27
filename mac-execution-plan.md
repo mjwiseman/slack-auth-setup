@@ -211,7 +211,7 @@ Add or replace only `mcpServers.slack`:
   "type": "http",
   "url": "https://mcp.slack.com/mcp",
   "headers": {
-    "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
+    "Authorization": "Bearer ${SLACK_MCP_TOKEN}"
   },
   "tools": ["*"]
 }
