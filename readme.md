@@ -1,8 +1,19 @@
 # Slack MCP Auth Setup
 
-This repository contains setup helpers for connecting MCP clients to Slack using the official Slack MCP server.
+This repository contains setup notes and helpers for connecting MCP clients to Slack using the official Slack MCP server.
 
-This version uses a confidential-client OAuth flow. It requires the Slack app client secret and is intended for testing the long-lived-token alternative. Treat the script, shell history, and generated environment files as sensitive.
+## Recommended Setup
+
+VS Code and GitHub Copilot CLI can now handle the Slack OAuth flow directly with a Slack app Client ID. This is the preferred setup because users do not need a shared Slack token, a locally generated `SLACK_MCP_TOKEN`, or the Slack app Client Secret.
+
+Use these guides first:
+
+- [Slack MCP App Admin Guide](./slack-app-admin-guide.md)
+- [Slack MCP User Setup Guide](./user-setup-guide.md)
+
+The PowerShell and Python scripts in this repository are kept as an older fallback for manually generating and storing a bearer token. They should not be needed for the OAuth Client ID setup.
+
+The legacy script setup below uses a confidential-client OAuth flow. It requires the Slack app client secret and was used for testing the long-lived-token alternative. Treat the script, shell history, and generated environment files as sensitive.
 
 The important bit: each person authorizes Slack as themselves. MCP clients then see the Slack messages, channels, and threads that the current Slack user can access, rather than using a shared team token.
 
@@ -14,10 +25,10 @@ The goal of these helpers is to make the better pattern easy enough for day-to-d
 
 1. A Slack app admin creates and approves one internal Slack MCP app.
 2. Each person authorizes that same app with their own Slack account.
-3. The helper stores that person's user token locally as `SLACK_MCP_TOKEN`.
-4. VS Code or GitHub Copilot CLI can then use Slack MCP with that person's Slack permissions.
+3. VS Code or GitHub Copilot CLI stores and refreshes the OAuth credentials it needs.
+4. Slack MCP then runs with that person's Slack permissions.
 
-Earlier PKCE testing returned expiring Slack tokens. This confidential-client flow uses the Slack client secret and, with token rotation disabled, has so far returned non-expiring user tokens. That makes local MCP client setup simpler, but it also means the client secret must be handled carefully.
+Earlier PKCE testing with our own helper scripts returned expiring Slack tokens, but the native VS Code and Copilot CLI OAuth flows handle token management themselves. The older confidential-client scripts are still in the repo as a fallback, but the simpler Client ID setup is now preferred.
 
 ## What This Sets Up
 
