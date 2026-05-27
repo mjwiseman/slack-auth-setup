@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Authorize a Slack MCP app on macOS and save the returned user token as SLACK_MCP_TOKEN.
+Authorize a Slack MCP app on macOS, save the returned user token as SLACK_MCP_TOKEN,
+and optionally configure MCP clients.
 
 This helper uses Slack's confidential-client OAuth exchange. It requires the Slack client ID and
-client secret as command-line arguments. It does not create or edit MCP client configuration files.
+client secret as command-line arguments.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import datetime as dt
 import html
 import http.server
 import json
-import os
+import plistlib
 import secrets
 import shutil
 import subprocess
@@ -249,6 +250,20 @@ def save_launchctl_env(access_token: str) -> None:
         raise SetupError(f"Could not set {ENV_VAR_NAME} with launchctl.") from exc
 
 
+def save_launch_agent_env(access_token: str) -> Path:
+    launch_agents_dir = Path.home() / "Library" / "LaunchAgents"
+    launch_agents_dir.mkdir(parents=True, exist_ok=True)
+    plist_path = launch_agents_dir / "com.slack-mcp-token.env.plist"
+    plist = {
+        "Label": "com.slack-mcp-token.env",
+        "ProgramArguments": ["/bin/launchctl", "setenv", ENV_VAR_NAME, access_token],
+        "RunAtLoad": True,
+    }
+    with plist_path.open("wb") as plist_file:
+        plistlib.dump(plist, plist_file)
+    return plist_path
+
+
 def save_zshenv(access_token: str) -> Path:
     zshenv_path = Path.home() / ".zshenv"
     timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -266,6 +281,84 @@ def save_zshenv(access_token: str) -> Path:
     kept_lines.append(new_line)
     zshenv_path.write_text("\n".join(kept_lines) + "\n", encoding="utf-8")
     return zshenv_path
+
+
+def read_json_file_or_default(path: Path, default_value: dict[str, Any]) -> dict[str, Any]:
+    if not path.exists():
+        return default_value
+
+    raw = path.read_text(encoding="utf-8")
+    if not raw.strip():
+        return default_value
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SetupError(f"Could not parse existing JSON config at {path}: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise SetupError(f"Existing JSON config at {path} must contain a JSON object.")
+
+    return parsed
+
+
+def backup_file(path: Path) -> Path | None:
+    if not path.exists():
+        return None
+
+    timestamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = path.with_name(f"{path.name}.bak-{timestamp}")
+    shutil.copy2(path, backup_path)
+    return backup_path
+
+
+def write_json_config(path: Path, config: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+def update_vs_code_mcp_config(server_name: str = "slack") -> tuple[Path, Path | None]:
+    config_path = Path.home() / "Library" / "Application Support" / "Code" / "User" / "mcp.json"
+    backup_path = backup_file(config_path)
+    config = read_json_file_or_default(config_path, {})
+    servers = config.setdefault("servers", {})
+    if not isinstance(servers, dict):
+        raise SetupError(f"Existing VS Code MCP config at {config_path} has a non-object 'servers' value.")
+
+    servers[server_name] = {
+        "type": "http",
+        "url": "https://mcp.slack.com/mcp",
+        "headers": {
+            "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}",
+        },
+    }
+    write_json_config(config_path, config)
+    return config_path, backup_path
+
+
+def update_copilot_mcp_config(server_name: str = "slack") -> tuple[Path, Path | None]:
+    config_path = Path.home() / ".copilot" / "mcp-config.json"
+    backup_path = backup_file(config_path)
+    config = read_json_file_or_default(config_path, {})
+    servers = config.setdefault("mcpServers", {})
+    if not isinstance(servers, dict):
+        raise SetupError(f"Existing Copilot CLI MCP config at {config_path} has a non-object 'mcpServers' value.")
+
+    servers[server_name] = {
+        "type": "http",
+        "url": "https://mcp.slack.com/mcp",
+        "headers": {
+            "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}",
+        },
+        "tools": ["*"],
+    }
+    write_json_config(config_path, config)
+    return config_path, backup_path
+
+
+def confirm_setup_step(prompt: str) -> bool:
+    answer = input(f"{prompt} [Y/n] ").strip().lower()
+    return answer == "" or answer.startswith("y")
 
 
 def main() -> int:
@@ -305,12 +398,33 @@ def main() -> int:
         print(f"Slack reports this access token expires in {auth_response['expires_in']} seconds.")
 
     save_launchctl_env(access_token)
+    launch_agent_path = save_launch_agent_env(access_token)
     zshenv_path = save_zshenv(access_token)
+
+    vs_code_result: tuple[Path, Path | None] | None = None
+    if confirm_setup_step("Add Slack MCP to Visual Studio Code user configuration?"):
+        vs_code_result = update_vs_code_mcp_config()
+
+    copilot_result: tuple[Path, Path | None] | None = None
+    if confirm_setup_step("Add Slack MCP to GitHub Copilot CLI configuration?"):
+        copilot_result = update_copilot_mcp_config()
 
     print("")
     print(f"{ENV_VAR_NAME} has been saved for this macOS user.")
     print(f"Updated shell startup file: {zshenv_path}")
+    print(f"Updated LaunchAgent for GUI apps: {launch_agent_path}")
+    if vs_code_result is not None:
+        config_path, backup_path = vs_code_result
+        print(f"Configured VS Code MCP file: {config_path}")
+        if backup_path is not None:
+            print(f"Backup of previous VS Code config: {backup_path}")
+    if copilot_result is not None:
+        config_path, backup_path = copilot_result
+        print(f"Configured Copilot CLI MCP file: {config_path}")
+        if backup_path is not None:
+            print(f"Backup of previous Copilot config: {backup_path}")
     print("Open a new terminal before using it from shell-based tools.")
+    print("Fully restart VS Code before using the Slack MCP server there.")
     return 0
 
 

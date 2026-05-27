@@ -4,7 +4,7 @@
 
 This branch tests an alternative per-user authorization flow for GitHub Copilot CLI using Slack's confidential-client OAuth exchange. Each user runs a Windows PowerShell helper, approves the internal Slack MCP app in their browser, and receives a Slack user token that reflects only their own Slack permissions.
 
-The implementation requires the Slack client secret. The token is written to the user's local Copilot MCP config by default, and Copilot CLI sends it to Slack's hosted MCP endpoint as an `Authorization` bearer token.
+The implementation requires the Slack client secret. The token is stored as `SLACK_MCP_TOKEN`, and the helper can optionally configure VS Code and GitHub Copilot CLI to reference that environment variable.
 
 ## Current State
 
@@ -22,7 +22,7 @@ For GitHub Copilot CLI, the equivalent user-level configuration lives at:
 %USERPROFILE%\.copilot\mcp-config.json
 ```
 
-Copilot CLI supports remote HTTP MCP servers and literal HTTP header values. The target default configuration is:
+Copilot CLI supports remote HTTP MCP servers and HTTP headers. The target configuration is:
 
 ```json
 {
@@ -31,9 +31,25 @@ Copilot CLI supports remote HTTP MCP servers and literal HTTP header values. The
       "type": "http",
       "url": "https://mcp.slack.com/mcp",
       "headers": {
-        "Authorization": "Bearer xoxe.xoxp-..."
+        "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
       },
       "tools": ["*"]
+    }
+  }
+}
+```
+
+VS Code uses a different top-level key:
+
+```json
+{
+  "servers": {
+    "slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
+      }
     }
   }
 }
@@ -82,11 +98,13 @@ The script:
 - Validates the returned `state`.
 - Exchanges the authorization code through `https://slack.com/api/oauth.v2.user.access`.
 - Verifies the returned token with Slack `auth.test` and prints the Slack user/workspace IDs without printing the token.
-- Writes the returned token directly into the local Copilot MCP config by default.
-- Supports `-UseEnvironmentVariable` to store the token in the current user's `SLACK_MCP_TOKEN` environment variable and reference it from the config.
-- Updates `%USERPROFILE%\.copilot\mcp-config.json`, or `$env:COPILOT_HOME\mcp-config.json` when `COPILOT_HOME` is set.
+- Stores the returned token in the current user's `SLACK_MCP_TOKEN` environment variable.
+- Asks whether to update VS Code user MCP config.
+- Asks whether to update GitHub Copilot CLI MCP config.
+- Updates `%APPDATA%\Code\User\mcp.json` for VS Code when selected.
+- Updates `%USERPROFILE%\.copilot\mcp-config.json`, or `$env:COPILOT_HOME\mcp-config.json`, for Copilot CLI when selected.
 - Creates a timestamped backup before changing an existing MCP config.
-- Replaces only the `mcpServers.slack` entry and preserves other MCP servers.
+- Replaces only the `servers.slack` or `mcpServers.slack` entry and preserves other MCP servers.
 - Never prints the Slack token.
 
 ## Failure Handling
@@ -118,19 +136,20 @@ Manual happy path on Windows:
 ```
 
 2. Approve Slack permissions in the browser.
-3. Confirm the script updates:
+3. Select VS Code and/or Copilot CLI config when prompted.
+4. Confirm the token exists:
 
-```text
-%USERPROFILE%\.copilot\mcp-config.json
+```powershell
+echo $env:SLACK_MCP_TOKEN
 ```
 
-4. Confirm the config contains a `slack` entry:
+5. If selected, confirm config files contain a `slack` entry:
 
 ```powershell
 Get-Content "$HOME\.copilot\mcp-config.json"
 ```
 
-5. Do not share or paste the bearer token from the config.
+6. Do not share or paste the bearer token.
 
 Copilot CLI validation:
 

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Create a macOS helper that performs the same Slack OAuth user-token flow as the confidential-client Windows branch, but only stores the resulting Slack token as a user environment variable. It must not create or update Copilot MCP config files. Users can then reference the environment variable wherever their MCP client needs it.
+Create a macOS helper that performs the same Slack OAuth user-token flow as the confidential-client Windows branch, stores the resulting Slack token as a user environment variable, and optionally adds Slack MCP configuration for VS Code and GitHub Copilot CLI.
 
 Deliverable:
 
@@ -26,7 +26,9 @@ The script:
 4. Exchanges the OAuth code for a Slack user token using the provided client secret.
 5. Verifies the returned token with Slack `auth.test`.
 6. Saves the token as `SLACK_MCP_TOKEN` for the macOS user.
-7. Prints the Slack user/workspace identity, but never prints the token.
+7. Asks whether to add Slack MCP to VS Code.
+8. Asks whether to add Slack MCP to GitHub Copilot CLI.
+9. Prints the Slack user/workspace identity, but never prints the token.
 
 ## Slack App Requirements
 
@@ -75,7 +77,7 @@ Supported arguments:
 - `--client-id`: Slack app client ID.
 - `--client-secret`: Slack app client secret.
 
-Do not add options for redirect port, server name, scopes, or Copilot config paths. The script is intentionally narrow: it gets a token and stores it for the user.
+Do not add options for redirect port, server name, scopes, or config paths. The script keeps the Slack server name fixed as `slack`.
 
 ## Token Exchange Flow
 
@@ -124,7 +126,7 @@ If `auth.test` fails, do not save the token.
 
 ## macOS Environment Storage
 
-Store the token in both places:
+Store the token in three places:
 
 1. Current user launch environment:
 
@@ -146,6 +148,20 @@ export SLACK_MCP_TOKEN="<token>"
 
 Use a timestamped backup before modifying an existing `~/.zshenv`.
 
+3. Persistent LaunchAgent for GUI apps:
+
+```text
+~/Library/LaunchAgents/com.slack-mcp-token.env.plist
+```
+
+The LaunchAgent should run:
+
+```bash
+/bin/launchctl setenv SLACK_MCP_TOKEN "<token>"
+```
+
+This makes the variable available to GUI apps such as VS Code on future logins. The script should also call `launchctl setenv` immediately for the current login session.
+
 After saving, print:
 
 ```text
@@ -154,6 +170,59 @@ Open a new terminal before using it from shell-based tools.
 ```
 
 Do not print the token.
+
+## Optional MCP Client Configuration
+
+After saving `SLACK_MCP_TOKEN`, ask:
+
+```text
+Add Slack MCP to Visual Studio Code user configuration? [Y/n]
+Add Slack MCP to GitHub Copilot CLI configuration? [Y/n]
+```
+
+If the user selects VS Code, update:
+
+```text
+~/Library/Application Support/Code/User/mcp.json
+```
+
+Add or replace only `servers.slack`:
+
+```json
+{
+  "type": "http",
+  "url": "https://mcp.slack.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
+  }
+}
+```
+
+If the user selects GitHub Copilot CLI, update:
+
+```text
+~/.copilot/mcp-config.json
+```
+
+Add or replace only `mcpServers.slack`:
+
+```json
+{
+  "type": "http",
+  "url": "https://mcp.slack.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ${env:SLACK_MCP_TOKEN}"
+  },
+  "tools": ["*"]
+}
+```
+
+For both files:
+
+- Create parent directories if missing.
+- Create a timestamped backup before modifying an existing file.
+- Preserve unrelated servers and settings.
+- Fail clearly if the existing JSON is invalid or if `servers` / `mcpServers` is not an object.
 
 ## Validation Steps
 
@@ -192,12 +261,13 @@ If `expires_in` appears, the token is expiring and the user may need to rerun th
 
 - The client secret is passed as an argument, not stored in the script.
 - The token is saved to the user's environment and `~/.zshenv`; both should be treated as sensitive.
+- The token is also saved in a LaunchAgent plist so GUI apps can receive it on future logins.
+- Optional VS Code and Copilot CLI config files reference `SLACK_MCP_TOKEN` and do not store the bearer token directly.
 - The script must not log the client secret, OAuth code, access token, or refresh token.
 - Shell history may capture the client secret if passed directly on the command line. A later improvement could prompt for the secret interactively instead.
 
 ## Out of Scope
 
-- Creating or editing `~/.copilot/mcp-config.json`.
 - Supporting multiple MCP server names.
 - Custom scope selection.
 - Custom redirect ports.

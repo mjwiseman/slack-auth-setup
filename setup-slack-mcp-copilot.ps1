@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-Authorizes a Slack MCP app for the current Windows user and configures GitHub Copilot CLI.
+Authorizes a Slack MCP app for the current Windows user and optionally configures MCP clients.
 
 .DESCRIPTION
 This script performs a Slack OAuth user-token flow using a confidential-client exchange. It requires
-the Slack client secret. By default, the returned user token is written directly to the local GitHub
-Copilot CLI MCP config. Use -UseEnvironmentVariable to store it in SLACK_MCP_TOKEN instead.
+the Slack client secret. The returned user token is stored in SLACK_MCP_TOKEN so MCP clients can
+reference it from their configuration.
 
 .EXAMPLE
 .\setup-slack-mcp-copilot.ps1 -ClientId "1234567890.1234567890123" -ClientSecret "abc123"
@@ -35,10 +35,7 @@ param(
     ),
 
     [Parameter(Mandatory = $false)]
-    [string]$ServerName = "slack",
-
-    [Parameter(Mandatory = $false)]
-    [switch]$UseEnvironmentVariable
+    [string]$ServerName = "slack"
 )
 
 Set-StrictMode -Version Latest
@@ -147,7 +144,7 @@ function Read-JsonFileOrDefault {
         return $raw | ConvertFrom-Json
     }
     catch {
-        throw "Could not parse existing Copilot MCP config at '$Path'. A backup has been created. Fix or remove this file, then rerun the script. Parse error: $($_.Exception.Message)"
+        throw "Could not parse existing MCP config at '$Path'. A backup has been created. Fix or remove this file, then rerun the script. Parse error: $($_.Exception.Message)"
     }
 }
 
@@ -168,10 +165,7 @@ function Set-JsonProperty {
 }
 
 function Update-CopilotMcpConfig {
-    param(
-        [Parameter(Mandatory = $true)][string]$ConfiguredServerName,
-        [Parameter(Mandatory = $true)][string]$AuthorizationHeader
-    )
+    param([Parameter(Mandatory = $true)][string]$ConfiguredServerName)
 
     $copilotHome = if ([string]::IsNullOrWhiteSpace($env:COPILOT_HOME)) {
         Join-Path $HOME ".copilot"
@@ -196,12 +190,52 @@ function Update-CopilotMcpConfig {
         type = "http"
         url = "https://mcp.slack.com/mcp"
         headers = [pscustomobject]@{
-            Authorization = $AuthorizationHeader
+            Authorization = 'Bearer ${env:SLACK_MCP_TOKEN}'
         }
         tools = @("*")
     }
 
     Set-JsonProperty -Object $config.mcpServers -Name $ConfiguredServerName -Value $serverConfig
+
+    $json = $config | ConvertTo-Json -Depth 100
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($configPath, $json + [Environment]::NewLine, $utf8NoBom)
+
+    return [pscustomobject]@{
+        ConfigPath = $configPath
+        BackupPath = $backupPath
+    }
+}
+
+function Update-VsCodeMcpConfig {
+    param([Parameter(Mandatory = $true)][string]$ConfiguredServerName)
+
+    if ([string]::IsNullOrWhiteSpace($env:APPDATA)) {
+        throw "APPDATA is not set, so the VS Code user MCP config path could not be resolved."
+    }
+
+    $vsCodeUserHome = Join-Path $env:APPDATA "Code\User"
+    if (-not (Test-Path -LiteralPath $vsCodeUserHome)) {
+        New-Item -ItemType Directory -Path $vsCodeUserHome -Force | Out-Null
+    }
+
+    $configPath = Join-Path $vsCodeUserHome "mcp.json"
+    $backupPath = Backup-File -Path $configPath
+
+    $config = Read-JsonFileOrDefault -Path $configPath -DefaultValue ([pscustomobject]@{})
+    if ($null -eq $config.PSObject.Properties["servers"]) {
+        $config | Add-Member -MemberType NoteProperty -Name "servers" -Value ([pscustomobject]@{})
+    }
+
+    $serverConfig = [pscustomobject]@{
+        type = "http"
+        url = "https://mcp.slack.com/mcp"
+        headers = [pscustomobject]@{
+            Authorization = 'Bearer ${env:SLACK_MCP_TOKEN}'
+        }
+    }
+
+    Set-JsonProperty -Object $config.servers -Name $ConfiguredServerName -Value $serverConfig
 
     $json = $config | ConvertTo-Json -Depth 100
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -226,6 +260,13 @@ function Test-SlackToken {
         Write-Warning "Could not verify the Slack token with auth.test. Continuing setup. Error: $($_.Exception.Message)"
         return $null
     }
+}
+
+function Confirm-SetupStep {
+    param([Parameter(Mandatory = $true)][string]$Prompt)
+
+    $answer = Read-Host "$Prompt [Y/n]"
+    return [string]::IsNullOrWhiteSpace($answer) -or $answer.Trim().ToLowerInvariant().StartsWith("y")
 }
 
 if ([string]::IsNullOrWhiteSpace($ClientId) -or $ClientId -eq "<REPLACE_WITH_SLACK_CLIENT_ID>") {
@@ -294,7 +335,7 @@ try {
         throw "Slack did not return an authorization code."
     }
 
-    Write-BrowserResponse -Context $context -Title "Slack authorization complete" -Message "Slack authorization succeeded. The setup helper is finishing your local Copilot CLI configuration."
+    Write-BrowserResponse -Context $context -Title "Slack authorization complete" -Message "Slack authorization succeeded. The setup helper is finishing your local MCP setup."
 
     $tokenBody = @{
         client_id = $ClientId
@@ -355,31 +396,38 @@ try {
         }
     }
 
-    if ($UseEnvironmentVariable) {
-        [Environment]::SetEnvironmentVariable("SLACK_MCP_TOKEN", $accessToken, "User")
-        $env:SLACK_MCP_TOKEN = $accessToken
-        $authorizationHeader = 'Bearer ${SLACK_MCP_TOKEN}'
-    }
-    else {
-        $authorizationHeader = "Bearer $accessToken"
+    [Environment]::SetEnvironmentVariable("SLACK_MCP_TOKEN", $accessToken, "User")
+    $env:SLACK_MCP_TOKEN = $accessToken
+
+    $vsCodeResult = $null
+    if (Confirm-SetupStep -Prompt "Add Slack MCP to Visual Studio Code user configuration?") {
+        $vsCodeResult = Update-VsCodeMcpConfig -ConfiguredServerName $ServerName
     }
 
-    $configResult = Update-CopilotMcpConfig -ConfiguredServerName $ServerName -AuthorizationHeader $authorizationHeader
+    $copilotResult = $null
+    if (Confirm-SetupStep -Prompt "Add Slack MCP to GitHub Copilot CLI configuration?") {
+        $copilotResult = Update-CopilotMcpConfig -ConfiguredServerName $ServerName
+    }
 
     Write-Host ""
     Write-Host "Slack MCP setup complete."
-    Write-Host "Configured Copilot MCP file: $($configResult.ConfigPath)"
-    if ($null -ne $configResult.BackupPath) {
-        Write-Host "Backup of previous config: $($configResult.BackupPath)"
+    Write-Host "Saved SLACK_MCP_TOKEN as a Windows user environment variable."
+    if ($null -ne $vsCodeResult) {
+        Write-Host "Configured VS Code MCP file: $($vsCodeResult.ConfigPath)"
+        if ($null -ne $vsCodeResult.BackupPath) {
+            Write-Host "Backup of previous VS Code config: $($vsCodeResult.BackupPath)"
+        }
+    }
+    if ($null -ne $copilotResult) {
+        Write-Host "Configured Copilot CLI MCP file: $($copilotResult.ConfigPath)"
+        if ($null -ne $copilotResult.BackupPath) {
+            Write-Host "Backup of previous Copilot config: $($copilotResult.BackupPath)"
+        }
     }
     Write-Host ""
-    if ($UseEnvironmentVariable) {
-        Write-Host "Open a new terminal before running GitHub Copilot CLI so it can read the new SLACK_MCP_TOKEN environment variable."
-    }
-    else {
-        Write-Host "The Slack bearer token was written directly to the Copilot MCP config."
-    }
-    Write-Host "Then run gh copilot and use /mcp show $ServerName to verify the Slack MCP server."
+    Write-Host "Open a new terminal before running shell-based tools so they can read the new SLACK_MCP_TOKEN environment variable."
+    Write-Host "Fully restart VS Code before using the Slack MCP server there."
+    Write-Host "In Copilot CLI, run gh copilot and use /mcp show $ServerName to verify the Slack MCP server."
 }
 finally {
     if ($listener.IsListening) {
