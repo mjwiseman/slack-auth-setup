@@ -2,7 +2,7 @@
 
 This folder contains setup helpers for connecting MCP clients to Slack using the official Slack MCP server.
 
-This branch uses a confidential-client OAuth flow. It requires the Slack app client secret and is intended for testing the long-lived-token alternative. Treat the script, shell history, and generated config as sensitive.
+This branch uses a confidential-client OAuth flow. It requires the Slack app client secret and is intended for testing the long-lived-token alternative. Treat the script, shell history, and generated environment files as sensitive.
 
 The important bit: each person authorizes Slack as themselves. MCP clients then see the Slack messages, channels, and threads that the current Slack user can access, rather than using a shared team token.
 
@@ -52,9 +52,8 @@ The Copilot CLI MCP entry looks like this:
 
 You need:
 
-- Windows 10 or 11.
-- PowerShell.
-- GitHub Copilot CLI, usually launched with `gh copilot`.
+- Windows 10 or 11 with PowerShell, or macOS with Python 3.
+- VS Code and/or GitHub Copilot CLI if you want the script to configure those clients.
 - Access to the Slack workspace.
 - The Slack app's Client ID.
 - The Slack app's Client Secret.
@@ -98,6 +97,13 @@ Your browser will open Slack. Approve the requested permissions.
 
 When prompted, choose whether to add Slack MCP to VS Code and/or GitHub Copilot CLI.
 
+If selected, Windows config paths are:
+
+```text
+%APPDATA%\Code\User\mcp.json
+%USERPROFILE%\.copilot\mcp-config.json
+```
+
 Open a new terminal before using shell-based tools so `SLACK_MCP_TOKEN` is available.
 
 Fully restart VS Code before using the Slack MCP server there.
@@ -115,6 +121,13 @@ python3 setup-slack-mcp-token-mac.py \
 Your browser will open Slack. Approve the requested permissions.
 
 When prompted, choose whether to add Slack MCP to VS Code and/or GitHub Copilot CLI.
+
+If selected, macOS config paths are:
+
+```text
+~/Library/Application Support/Code/User/mcp.json
+~/.copilot/mcp-config.json
+```
 
 Open a new terminal before using shell-based tools so `SLACK_MCP_TOKEN` is available.
 
@@ -137,6 +150,21 @@ echo "$SLACK_MCP_TOKEN"
 ```
 
 Do not paste or share the token.
+
+You can also check Slack accepts the token:
+
+Windows:
+
+```powershell
+curl.exe -X POST "https://slack.com/api/auth.test" -H "Authorization: Bearer $env:SLACK_MCP_TOKEN"
+```
+
+macOS:
+
+```bash
+curl -X POST "https://slack.com/api/auth.test" \
+  -H "Authorization: Bearer $SLACK_MCP_TOKEN"
+```
 
 Start Copilot CLI:
 
@@ -208,15 +236,47 @@ You cancelled or denied the Slack approval request. Rerun the script and approve
 
 ### `/mcp show slack` does not work
 
-Check that `%USERPROFILE%\.copilot\mcp-config.json` contains a `slack` entry.
+Check that your Copilot CLI config contains a `slack` entry.
+
+Windows:
+
+```text
+%USERPROFILE%\.copilot\mcp-config.json
+```
+
+macOS:
+
+```text
+~/.copilot/mcp-config.json
+```
 
 Check that the token is available in the terminal where you started Copilot CLI:
+
+Windows:
 
 ```powershell
 echo $env:SLACK_MCP_TOKEN
 ```
 
-If it is blank, open a new PowerShell window and try again.
+macOS:
+
+```bash
+echo "$SLACK_MCP_TOKEN"
+```
+
+If it is blank, open a new terminal window and try again.
+
+### VS Code cannot read `SLACK_MCP_TOKEN`
+
+Fully quit and reopen VS Code after running the setup script.
+
+On macOS, check the GUI launch environment:
+
+```bash
+launchctl getenv SLACK_MCP_TOKEN
+```
+
+If your shell has an older token in `~/.zshrc`, `~/.zprofile`, or `~/.zshenv`, remove the stale entry and rerun the setup script.
 
 ### Existing MCP config parse error
 
@@ -263,6 +323,7 @@ Then start a new Copilot CLI session and check:
 - VS Code and Copilot CLI configs reference `SLACK_MCP_TOKEN` rather than storing the bearer token directly.
 - The token is not printed by the script.
 - On macOS, the token is stored in `~/.zshenv` and a LaunchAgent plist so shell and GUI apps can read it.
+- On Windows, the token is stored as a user environment variable.
 - Do not share the client secret or token, or paste them into chat, issues, logs, or screenshots.
 
 ## References
